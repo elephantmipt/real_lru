@@ -107,21 +107,10 @@ class LRU(nn.Module):
         self.dropout = nn.Dropout(self.attention_dropout_rate)
 
     def __call__(self, input_sequence, training):
-        def apply_lru(Lambda, B_re, B_im, C_re, C_im, input_sequence):
-            Lambda_elements = jnp.repeat(
-                Lambda[None, ...], input_sequence.shape[0], axis=0
-            )
-            Lambda_re = Lambda_elements.real
-            Lambda_im = Lambda_elements.imag
+        def apply_lru(Lambda_re, Lambda_im, B_re, B_im, C_re, C_im, input_sequence):
 
             Bu_re_elements = jax.vmap(lambda u: B_re @ u)(input_sequence)
             Bu_im_elements = jax.vmap(lambda u: B_im @ u)(input_sequence)
-
-            Lambda_re, Lambda_im, C_re, C_im = nn.dtypes.promote_dtype(
-                Lambda_re, Lambda_im, C_re, C_im, dtype=self.dtype
-            )
-
-            # Bu_elements = Bu_re_elements + 1j*Bu_im_elements
 
             elements = (
                 (Lambda_re, Lambda_im),
@@ -134,19 +123,36 @@ class LRU(nn.Module):
 
         def call(input_sequence):
             deterministic = not training
-            Lambda = jnp.exp(-jnp.exp(self.nu_log) + 1j * jnp.exp(self.theta_log))
-            gamma = jnp.sqrt(1 - jnp.abs(Lambda) ** 2)
+            nu_log, theta_log, B_re, B_im, C_re, C_im, D, input_sequence = nn.dtypes.promote_dtype(
+                self.nu_log,
+                self.theta_log,
+                self.B_re,
+                self.B_im,
+                self.C_re,
+                self.C_im,
+                self.D,
+                input_sequence,
+                dtype=self.dtype
+            )
+            r = jnp.exp(-jnp.exp(nu_log))
+
+            radians = jnp.exp(theta_log)
+
+            gamma = jnp.sqrt(1 - r ** 2)
+
+            Lambda_re = jnp.cos(radians) * r
+            Lambda_im = jnp.sin(radians) * r
+            Lambda_re = jnp.repeat(Lambda_re[None, ...], repeats=input_sequence.shape[0], axis=0)
+            Lambda_im = jnp.repeat(Lambda_im[None, ...], repeats=input_sequence.shape[0], axis=0)
+
             mask = self.dropout(
                 jnp.ones_like(input_sequence[0]), deterministic=deterministic
             )
             input_sequence = jax.vmap(lambda x: mask * x)(input_sequence)
-            B_re, B_im, gamma, input_sequence = nn.dtypes.promote_dtype(
-                self.B_re, self.B_im, gamma, input_sequence, dtype=self.dtype
-            )
-            C_re, C_im = nn.dtypes.promote_dtype(self.C_re, self.C_im, dtype=self.dtype)
 
             ys, inner_states = apply_lru(
-                Lambda,
+                Lambda_re,
+                Lambda_im,
                 B_re * jnp.expand_dims(gamma, axis=-1),
                 B_im * jnp.expand_dims(gamma, axis=-1),
                 C_re,
@@ -159,7 +165,6 @@ class LRU(nn.Module):
             Du = jax.vmap(lambda u: D * u)(input_sequence)
             res = ys + Du
             return res
-
         return jax.vmap(call)(input_sequence)
 
 

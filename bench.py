@@ -62,8 +62,8 @@ def get_benchmark(train_state, batch_size, seq_len, hidden_dim, dtype):
         out = train_state.apply_fn(train_state.params, batch, True)
         return out
 
-    def test_speed(train_state, bs, seq_len, hid_state, key, dtype):
-        batch = jax.random.normal(key, (bs, seq_len, hid_state), dtype=dtype)
+    def test_speed(train_state, batch_size, seq_len, hidden_dim, key, dtype):
+        batch = jax.random.normal(key, (batch_size, seq_len, hidden_dim), dtype=dtype)
         start = time.time()
         out = forward(batch, train_state)
         jax.block_until_ready(out)

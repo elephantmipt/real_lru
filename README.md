@@ -14,6 +14,6 @@ Results obtained by running `bench.py`.
 ## Plan
 
 - [x] Mixed Precision computation
-- [ ] Materializing $\Lambda$ through real numbers
+- [x] Materializing $\Lambda$ through real numbers
 - [ ] Simple LM with LRU
 - [ ] Wikitext trained model
